@@ -6,27 +6,23 @@ import csv
 # ===============================
 # CONFIG
 # ===============================
-CSV_PATH = "/home/danba/reload_rearm.csv"
+#CSV_PATH = "/home/danba/reload_rearm.csv"
+CSV_PATH = "/home/aryan/reload_rearm.csv"
 
 DEFAULT_ALT = 20.0        # meters
 DROP_ALT = 5.0            # meters
 HOVER_TIME = 5            # seconds
 
 ARRIVAL_THRESH = 2.0      # meters
-ALT_TOL = 0.8             # meters (REAL WORLD)
+ALT_TOL = 0.8             # meters
 DESCENT_TIMEOUT = 20      # seconds
 POS_TIMEOUT = 1.0         # seconds
 
 GROUND_WAIT = 40          # seconds
 
-SERVO_NUM = 9             # AUX1 = SERVO9
-SERVO_OPEN = 2000
-SERVO_CLOSE = 1000
-
 # ===============================
 # CSV LOADER
 # ===============================
-
 def load_csv_waypoints(path, default_alt):
     wps = []
     with open(path, newline="", encoding="utf-8-sig") as f:
@@ -42,7 +38,9 @@ def load_csv_waypoints(path, default_alt):
 # ===============================
 # CONNECT
 # ===============================
-master = mavutil.mavlink_connection("udp:127.0.0.1:14550")
+#master = mavutil.mavlink_connection("udp:127.0.0.1:14550")
+master = mavutil.mavlink_connection("/dev/ttyAMA0", baud=57600)
+
 master.wait_heartbeat()
 print("Connected to vehicle")
 
@@ -75,23 +73,7 @@ def distance_m(lat1, lon1, lat2, lon2):
     )
     return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-def set_servo(pwm, label=""):
-    print(f"Servo {label} | PWM = {pwm}")
-    master.mav.command_long_send(
-        master.target_system,
-        master.target_component,
-        mavutil.mavlink.MAV_CMD_DO_SET_SERVO,
-        0,
-        SERVO_NUM,
-        pwm,
-        0, 0, 0, 0, 0
-    )
-
 def arm_and_takeoff(alt):
-    print("Closing servo before takeoff")
-    set_servo(SERVO_CLOSE, "CLOSE")
-    time.sleep(5)
-
     master.set_mode_apm("GUIDED")
     time.sleep(1)
 
@@ -172,7 +154,6 @@ def descend_and_hover(target_alt, hover_time):
 
     start = time.time()
     while time.time() - start < DESCENT_TIMEOUT:
-        # KEEP SENDING THE SETPOINT
         master.mav.set_position_target_global_int_send(
             0,
             master.target_system,
@@ -205,7 +186,6 @@ def descend_and_hover(target_alt, hover_time):
     print(f"Hovering for {hover_time} seconds")
     time.sleep(hover_time)
 
-
 # ===============================
 # MAIN
 # ===============================
@@ -215,7 +195,6 @@ if not waypoints:
 
 print(f"Loaded {len(waypoints)} waypoints")
 
-# ---- MISSION TIMER START ----
 mission_start_time = time.time()
 
 arm_and_takeoff(DEFAULT_ALT)
@@ -225,9 +204,6 @@ for i, (lat, lon, alt) in enumerate(waypoints, start=1):
 
     goto(lat, lon, alt)
     descend_and_hover(DROP_ALT, HOVER_TIME)
-
-    print("Opening servo")
-    set_servo(SERVO_OPEN, "OPEN")
 
     print("RTL")
     master.set_mode_apm("RTL")
@@ -240,7 +216,6 @@ for i, (lat, lon, alt) in enumerate(waypoints, start=1):
     if i < len(waypoints):
         arm_and_takeoff(alt)
 
-# ---- MISSION TIMER END ----
 mission_end_time = time.time()
 elapsed = mission_end_time - mission_start_time
 
